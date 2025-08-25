@@ -1,5 +1,4 @@
 ﻿using Vmi.Portal.Entities;
-using Vmi.Portal.Enums;
 
 namespace Vmi.Portal.Models;
 

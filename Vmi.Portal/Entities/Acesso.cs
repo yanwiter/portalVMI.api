@@ -2,9 +2,7 @@
 
 public class Acesso
 {
-    public int Id { get; set; }
-
+    public Guid Id { get; set; } = Guid.NewGuid();
     public string Nome { get; set; }
-
     public string Descricao { get; set; }
 }

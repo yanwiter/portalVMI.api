@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Vmi.Portal.Entities;
-using Vmi.Portal.Enums;
 using Vmi.Portal.Models;
 using Vmi.Portal.Services;
 using Vmi.Portal.Utils;
+using Vmi.Portal.Enums;
 
 namespace Vmi.Portal.Controllers;
 
@@ -30,7 +30,7 @@ public class PerfilController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string nome = null,
-        [FromQuery] bool? statusPerfil = null)
+        [FromQuery] StatusPerfilEnum? statusPerfil = null)
     {
         try
         {
@@ -39,6 +39,7 @@ public class PerfilController : ControllerBase
         }
         catch (Exception ex)
         {
+            throw;
             _logger.LogError(ex, "Erro ao obter perfis");
             return StatusCode(500, "Ocorreu um erro ao processar sua requisição");
         }
@@ -54,6 +55,7 @@ public class PerfilController : ControllerBase
         }
         catch (Exception ex)
         {
+            throw;
             _logger.LogError(ex, "Erro ao obter perfis");
             return StatusCode(500, "Ocorreu um erro ao processar sua requisição");
         }
@@ -61,8 +63,8 @@ public class PerfilController : ControllerBase
 
     [HttpGet("{id}")]
     public async Task<ActionResult> GetById(
-        int id,
-        AcessoEnum acesso,
+        Guid id,
+        Guid acesso,
         string rotina,
         string modulo)
     {
@@ -106,7 +108,7 @@ public class PerfilController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] InformacaoPerfil informacaoPerfil, int usuarioId)
+    public async Task<IActionResult> Update(Guid id, [FromBody] InformacaoPerfil informacaoPerfil, int usuarioId)
     {
         try
         {
@@ -129,7 +131,36 @@ public class PerfilController : ControllerBase
                 return BadRequest("O usuário que está modificando não foi encontrado.");
             }
 
-            if (!informacaoPerfil.Perfil.StatusPerfil)
+            if (informacaoPerfil.Perfil.StatusPerfil == StatusPerfilEnum.Suspenso)
+            {
+                if (string.IsNullOrEmpty(informacaoPerfil.Perfil.MotivoSuspensao))
+                {
+                    return BadRequest("O motivo da suspensão é obrigatório.");
+                }
+
+                if (informacaoPerfil.Perfil.DataInicioSuspensao == null)
+                {
+                    return BadRequest("A data de início da suspensão é obrigatória.");
+                }
+
+                if (informacaoPerfil.Perfil.TipoSuspensao == TipoSuspensaoEnum.Temporaria)
+                {
+                    if (informacaoPerfil.Perfil.DataFimSuspensao == null)
+                    {
+                        return BadRequest("A data de fim da suspensão é obrigatória para suspensões temporárias.");
+                    }
+
+                    if (informacaoPerfil.Perfil.DataFimSuspensao <= informacaoPerfil.Perfil.DataInicioSuspensao)
+                    {
+                        return BadRequest("A data de fim da suspensão deve ser posterior à data de início.");
+                    }
+                }
+
+                informacaoPerfil.Perfil.IdRespSuspensao = respModificacao.Id;
+                informacaoPerfil.Perfil.NomeRespSuspensao = respModificacao.Nome;
+            }
+
+            if (informacaoPerfil.Perfil.StatusPerfil == StatusPerfilEnum.Inativo)
             {
                 informacaoPerfil.Perfil.IdRespInativacao = respModificacao.Id;
                 informacaoPerfil.Perfil.NomeRespInativacao = respModificacao.Nome;
@@ -151,7 +182,7 @@ public class PerfilController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(Guid id)
     {
         try
         {
@@ -162,12 +193,34 @@ public class PerfilController : ControllerBase
             }
 
             await _perfilService.RemoverPerfil(id);
-            return NoContent();
+            return Ok();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Erro ao remover perfil com ID {id}");
             return StatusCode(500, "Ocorreu um erro ao remover o perfil");
+        }
+    }
+
+    [HttpGet("exportar-excel")]
+    public async Task<IActionResult> ExportarParaExcel(
+    [FromQuery] int pageNumber = 1,
+    [FromQuery] int pageSize = 10,
+    [FromQuery] string nome = null,
+    [FromQuery] StatusPerfilEnum? statusPerfil = null)
+    {
+        try
+        {
+            var excelBytes = await _perfilService.ExportarPerfisParaExcel(pageNumber, pageSize, nome, statusPerfil);
+
+            return File(excelBytes,
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       $"perfis-{DateTime.Now:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao exportar perfis para Excel");
+            return StatusCode(500, "Ocorreu um erro ao exportar os perfis para Excel");
         }
     }
 }

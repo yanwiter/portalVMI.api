@@ -4,6 +4,7 @@ using Vmi.Portal.Common;
 using Vmi.Portal.DbContext;
 using Vmi.Portal.Entities;
 using Vmi.Portal.Repositories.Interfaces;
+using Vmi.Portal.Enums;
 
 namespace Vmi.Portal.Repositories;
 
@@ -16,7 +17,7 @@ public class PerfilRepository : IPerfilRepository
         _vmiDbContext = vmiDbContext;
     }
 
-    public async Task<PagedResult<Perfil>> ObterTodosPerfis(int pageNumber, int pageSize, string nome, bool? statusPerfil)
+    public async Task<PagedResult<Perfil>> ObterTodosPerfis(int pageNumber, int pageSize, string nome, StatusPerfilEnum? statusPerfil)
     {
         string sql = $@"
                         SELECT
@@ -30,7 +31,14 @@ public class PerfilRepository : IPerfilRepository
                             IdRespUltimaModificacao {nameof(Perfil.IdRespUltimaModificacao)},
                             NomeRespUltimaModificacao {nameof(Perfil.NomeRespUltimaModificacao)},
                             DataUltimaModificacao {nameof(Perfil.DataUltimaModificacao)},
-                            JustificativaInativacao {nameof(Perfil.JustificativaInativacao)}
+                            JustificativaInativacao {nameof(Perfil.JustificativaInativacao)},
+                            TipoSuspensao {nameof(Perfil.TipoSuspensao)},
+                            DataInicioSuspensao {nameof(Perfil.DataInicioSuspensao)},
+                            DataFimSuspensao {nameof(Perfil.DataFimSuspensao)},
+                            MotivoSuspensao {nameof(Perfil.MotivoSuspensao)},
+                            IdRespSuspensao {nameof(Perfil.IdRespSuspensao)},
+                            NomeRespSuspensao {nameof(Perfil.NomeRespSuspensao)},
+                            DataSuspensao {nameof(Perfil.DataSuspensao)}
                         FROM
                             Perfis WITH(NOLOCK)
                         WHERE
@@ -83,8 +91,12 @@ public class PerfilRepository : IPerfilRepository
         }
     }
 
-    public async Task<Perfil> ObterPerfilPorId(int id)
+    public async Task<Perfil> ObterPerfilPorId(Guid id)
     {
+        try
+        {
+
+        
         string sql = $@"
                         SELECT
                             Id {nameof(Perfil.Id)},
@@ -97,7 +109,14 @@ public class PerfilRepository : IPerfilRepository
                             IdRespUltimaModificacao {nameof(Perfil.IdRespUltimaModificacao)},
                             NomeRespUltimaModificacao {nameof(Perfil.NomeRespUltimaModificacao)},
                             DataUltimaModificacao {nameof(Perfil.DataUltimaModificacao)},
-                            JustificativaInativacao {nameof(Perfil.JustificativaInativacao)}
+                            JustificativaInativacao {nameof(Perfil.JustificativaInativacao)},
+                            TipoSuspensao {nameof(Perfil.TipoSuspensao)},
+                            DataInicioSuspensao {nameof(Perfil.DataInicioSuspensao)},
+                            DataFimSuspensao {nameof(Perfil.DataFimSuspensao)},
+                            MotivoSuspensao {nameof(Perfil.MotivoSuspensao)},
+                            IdRespSuspensao {nameof(Perfil.IdRespSuspensao)},
+                            NomeRespSuspensao {nameof(Perfil.NomeRespSuspensao)},
+                            DataSuspensao {nameof(Perfil.DataSuspensao)}
                         FROM
                             Perfis
                         WHERE
@@ -105,35 +124,52 @@ public class PerfilRepository : IPerfilRepository
 
         return await _vmiDbContext.Connection.
             QueryFirstOrDefaultAsync<Perfil>(sql, new { Id = id });
+        }
+        catch (Exception ex)
+        {
+
+            throw;
+        }
     }
 
-    public async Task<int> AdicionarPerfil(Perfil perfil)
+    public async Task<Guid> AdicionarPerfil(Perfil perfil)
     {
         string sql = $@"
-                        INSERT INTO
-                            Perfis (
-                                {nameof(Perfil.Nome)},
-                                {nameof(Perfil.Descricao)},
-                                {nameof(Perfil.StatusPerfil)},
-                                {nameof(Perfil.IdRespInclusao)},
-                                {nameof(Perfil.NomeRespInclusao)},
-                                {nameof(Perfil.DataInclusao)}
-                            )
-                        VALUES
-                            (
-                                @Nome,
-                                @Descricao,
-                                @StatusPerfil,
-                                @IdRespInclusao,
-                                @NomeRespInclusao,
-                                @DataInclusao
-                            );
+        INSERT INTO Perfis (
+            Id,
+            Nome,
+            Descricao,
+            StatusPerfil,
+            IdRespInclusao,
+            NomeRespInclusao,
+            DataInclusao,
+            TipoSuspensao,
+            DataInicioSuspensao,
+            DataFimSuspensao,
+            MotivoSuspensao,
+            IdRespSuspensao,
+            NomeRespSuspensao,
+            DataSuspensao
+        )
+        VALUES (
+            @Id,
+            @Nome,
+            @Descricao,
+            @StatusPerfil,
+            @IdRespInclusao,
+            @NomeRespInclusao,
+            @DataInclusao,
+            @TipoSuspensao,
+            @DataInicioSuspensao,
+            @DataFimSuspensao,
+            @MotivoSuspensao,
+            @IdRespSuspensao,
+            @NomeRespSuspensao,
+            @DataSuspensao
+        )";
 
-                        SELECT
-                            SCOPE_IDENTITY();
-                        ";
-
-        return await _vmiDbContext.Connection.ExecuteScalarAsync<int>(sql, perfil);
+        await _vmiDbContext.Connection.ExecuteAsync(sql, perfil);
+        return perfil.Id;
     }
 
     public async Task AtualizarPerfil(Perfil perfil)
@@ -153,20 +189,13 @@ public class PerfilRepository : IPerfilRepository
             parameters.Add(nameof(Perfil.Descricao), perfil.Descricao);
         }
 
-        if (perfil.StatusPerfil)
-        {
-            sqlSet.Add($"StatusPerfil = @{nameof(Perfil.StatusPerfil)}");
-            parameters.Add(nameof(Perfil.StatusPerfil), perfil.StatusPerfil);
+        sqlSet.Add($"StatusPerfil = @{nameof(Perfil.StatusPerfil)}");
+        parameters.Add(nameof(Perfil.StatusPerfil), perfil.StatusPerfil);
 
-            sqlSet.Add($"DataInativacao = NULL");
-            sqlSet.Add($"IdRespInativacao = NULL");
-            sqlSet.Add($"NomeRespInativacao = NULL");
-            sqlSet.Add($"JustificativaInativacao = NULL");
-        }
-        else
+        if (perfil.StatusPerfil == StatusPerfilEnum.Inativo)
         {
-            sqlSet.Add($"StatusPerfil = @{nameof(Perfil.StatusPerfil)}");
-            parameters.Add(nameof(Perfil.StatusPerfil), perfil.StatusPerfil);
+            sqlSet.Add($"DataInativacao = @{nameof(Perfil.DataInativacao)}");
+            parameters.Add(nameof(Perfil.DataInativacao), DateTime.Now);
 
             if (perfil.IdRespInativacao != null)
             {
@@ -177,14 +206,73 @@ public class PerfilRepository : IPerfilRepository
                 parameters.Add(nameof(Perfil.NomeRespInativacao), perfil.NomeRespInativacao);
             }
 
-            sqlSet.Add($"DataInativacao = @{nameof(Perfil.DataInativacao)}");
-            parameters.Add(nameof(Perfil.DataInativacao), DateTime.Now);
-
             if (perfil.JustificativaInativacao != null)
             {
                 sqlSet.Add($"JustificativaInativacao = @{nameof(Perfil.JustificativaInativacao)}");
                 parameters.Add(nameof(Perfil.JustificativaInativacao), perfil.JustificativaInativacao);
             }
+
+            sqlSet.Add($"TipoSuspensao = 0");
+            sqlSet.Add($"DataInicioSuspensao = NULL");
+            sqlSet.Add($"DataFimSuspensao = NULL");
+            sqlSet.Add($"MotivoSuspensao = NULL");
+            sqlSet.Add($"IdRespSuspensao = NULL");
+            sqlSet.Add($"NomeRespSuspensao = NULL");
+            sqlSet.Add($"DataSuspensao = NULL");
+        }
+
+        else if (perfil.StatusPerfil == StatusPerfilEnum.Suspenso)
+        {
+            sqlSet.Add($"DataInativacao = NULL");
+            sqlSet.Add($"IdRespInativacao = NULL");
+            sqlSet.Add($"NomeRespInativacao = NULL");
+            sqlSet.Add($"JustificativaInativacao = NULL");
+
+            sqlSet.Add($"TipoSuspensao = @{nameof(Perfil.TipoSuspensao)}");
+            parameters.Add(nameof(Perfil.TipoSuspensao), perfil.TipoSuspensao);
+
+            sqlSet.Add($"DataInicioSuspensao = @{nameof(Perfil.DataInicioSuspensao)}");
+            parameters.Add(nameof(Perfil.DataInicioSuspensao), perfil.DataInicioSuspensao);
+
+            if (perfil.TipoSuspensao == TipoSuspensaoEnum.Temporaria)
+            {
+                sqlSet.Add($"DataFimSuspensao = @{nameof(Perfil.DataFimSuspensao)}");
+                parameters.Add(nameof(Perfil.DataFimSuspensao), perfil.DataFimSuspensao);
+            }
+            else
+            {
+                sqlSet.Add($"DataFimSuspensao = NULL");
+            }
+
+            sqlSet.Add($"MotivoSuspensao = @{nameof(Perfil.MotivoSuspensao)}");
+            parameters.Add(nameof(Perfil.MotivoSuspensao), perfil.MotivoSuspensao);
+
+            if (perfil.IdRespSuspensao != null)
+            {
+                sqlSet.Add($"IdRespSuspensao = @{nameof(Perfil.IdRespSuspensao)}");
+                parameters.Add(nameof(Perfil.IdRespSuspensao), perfil.IdRespSuspensao);
+
+                sqlSet.Add($"NomeRespSuspensao = @{nameof(Perfil.NomeRespSuspensao)}");
+                parameters.Add(nameof(Perfil.NomeRespSuspensao), perfil.NomeRespSuspensao);
+            }
+
+            sqlSet.Add($"DataSuspensao = @{nameof(Perfil.DataSuspensao)}");
+            parameters.Add(nameof(Perfil.DataSuspensao), DateTime.Now);
+        }
+
+        else if (perfil.StatusPerfil == StatusPerfilEnum.Ativo)
+        {
+            sqlSet.Add($"DataInativacao = NULL");
+            sqlSet.Add($"IdRespInativacao = NULL");
+            sqlSet.Add($"NomeRespInativacao = NULL");
+            sqlSet.Add($"JustificativaInativacao = NULL");
+            sqlSet.Add($"TipoSuspensao = 0");
+            sqlSet.Add($"DataInicioSuspensao = NULL");
+            sqlSet.Add($"DataFimSuspensao = NULL");
+            sqlSet.Add($"MotivoSuspensao = NULL");
+            sqlSet.Add($"IdRespSuspensao = NULL");
+            sqlSet.Add($"NomeRespSuspensao = NULL");
+            sqlSet.Add($"DataSuspensao = NULL");
         }
 
         if (perfil.IdRespUltimaModificacao != null)
@@ -214,12 +302,125 @@ public class PerfilRepository : IPerfilRepository
         }
     }
 
-    public async Task RemoverPerfil(int id)
+    public async Task RemoverPerfil(Guid id)
     {
-        string sqlRotinas = "DELETE FROM PerfisRotinas WHERE Perfil_id = @Id";
+        string sqlRotinas = "DELETE FROM PerfisRotinas WHERE IdPerfil = @Id";
         await _vmiDbContext.Connection.ExecuteAsync(sqlRotinas, new { Id = id });
 
         string sql = "DELETE FROM Perfis WHERE Id = @Id";
         await _vmiDbContext.Connection.ExecuteAsync(sql, new { Id = id });
+    }
+
+    public async Task<List<Perfil>> ObterPerfisSuspensos()
+    {
+        string sql = $@"
+            SELECT
+                Id {nameof(Perfil.Id)},
+                Nome {nameof(Perfil.Nome)},
+                Descricao {nameof(Perfil.Descricao)},
+                StatusPerfil {nameof(Perfil.StatusPerfil)},
+                DataInclusao {nameof(Perfil.DataInclusao)},
+                IdRespInclusao {nameof(Perfil.IdRespInclusao)},
+                NomeRespInclusao {nameof(Perfil.NomeRespInclusao)},
+                IdRespUltimaModificacao {nameof(Perfil.IdRespUltimaModificacao)},
+                NomeRespUltimaModificacao {nameof(Perfil.NomeRespUltimaModificacao)},
+                DataUltimaModificacao {nameof(Perfil.DataUltimaModificacao)},
+                JustificativaInativacao {nameof(Perfil.JustificativaInativacao)},
+                TipoSuspensao {nameof(Perfil.TipoSuspensao)},
+                DataInicioSuspensao {nameof(Perfil.DataInicioSuspensao)},
+                DataFimSuspensao {nameof(Perfil.DataFimSuspensao)},
+                MotivoSuspensao {nameof(Perfil.MotivoSuspensao)},
+                IdRespSuspensao {nameof(Perfil.IdRespSuspensao)},
+                NomeRespSuspensao {nameof(Perfil.NomeRespSuspensao)},
+                DataSuspensao {nameof(Perfil.DataSuspensao)}
+            FROM
+                Perfis WITH(NOLOCK)
+            WHERE
+                StatusPerfil = @StatusPerfil
+            ORDER BY
+                Nome";
+
+        var perfis = await _vmiDbContext.Connection.QueryAsync<Perfil>(sql, 
+            new { StatusPerfil = StatusPerfilEnum.Suspenso });
+        
+        return perfis.ToList();
+    }
+
+    public async Task<List<Perfil>> ObterPerfisSuspensosTemporarios()
+    {
+        string sql = $@"
+            SELECT
+                Id {nameof(Perfil.Id)},
+                Nome {nameof(Perfil.Nome)},
+                Descricao {nameof(Perfil.Descricao)},
+                StatusPerfil {nameof(Perfil.StatusPerfil)},
+                DataInclusao {nameof(Perfil.DataInclusao)},
+                IdRespInclusao {nameof(Perfil.IdRespInclusao)},
+                NomeRespInclusao {nameof(Perfil.NomeRespInclusao)},
+                IdRespUltimaModificacao {nameof(Perfil.IdRespUltimaModificacao)},
+                NomeRespUltimaModificacao {nameof(Perfil.NomeRespUltimaModificacao)},
+                DataUltimaModificacao {nameof(Perfil.DataUltimaModificacao)},
+                JustificativaInativacao {nameof(Perfil.JustificativaInativacao)},
+                TipoSuspensao {nameof(Perfil.TipoSuspensao)},
+                DataInicioSuspensao {nameof(Perfil.DataInicioSuspensao)},
+                DataFimSuspensao {nameof(Perfil.DataFimSuspensao)},
+                MotivoSuspensao {nameof(Perfil.MotivoSuspensao)},
+                IdRespSuspensao {nameof(Perfil.IdRespSuspensao)},
+                NomeRespSuspensao {nameof(Perfil.NomeRespSuspensao)},
+                DataSuspensao {nameof(Perfil.DataSuspensao)}
+            FROM
+                Perfis WITH(NOLOCK)
+            WHERE
+                StatusPerfil = @StatusPerfil
+                AND TipoSuspensao = @TipoSuspensao
+            ORDER BY
+                Nome";
+
+        var perfis = await _vmiDbContext.Connection.QueryAsync<Perfil>(sql, 
+            new { 
+                StatusPerfil = StatusPerfilEnum.Suspenso, 
+                TipoSuspensao = TipoSuspensaoEnum.Temporaria 
+            });
+        
+        return perfis.ToList();
+    }
+
+    public async Task<List<Perfil>> ObterPerfisSuspensosPermanentes()
+    {
+        string sql = $@"
+            SELECT
+                Id {nameof(Perfil.Id)},
+                Nome {nameof(Perfil.Nome)},
+                Descricao {nameof(Perfil.Descricao)},
+                StatusPerfil {nameof(Perfil.StatusPerfil)},
+                DataInclusao {nameof(Perfil.DataInclusao)},
+                IdRespInclusao {nameof(Perfil.IdRespInclusao)},
+                NomeRespInclusao {nameof(Perfil.NomeRespInclusao)},
+                IdRespUltimaModificacao {nameof(Perfil.IdRespUltimaModificacao)},
+                NomeRespUltimaModificacao {nameof(Perfil.NomeRespUltimaModificacao)},
+                DataUltimaModificacao {nameof(Perfil.DataUltimaModificacao)},
+                JustificativaInativacao {nameof(Perfil.JustificativaInativacao)},
+                TipoSuspensao {nameof(Perfil.TipoSuspensao)},
+                DataInicioSuspensao {nameof(Perfil.DataInicioSuspensao)},
+                DataFimSuspensao {nameof(Perfil.DataFimSuspensao)},
+                MotivoSuspensao {nameof(Perfil.MotivoSuspensao)},
+                IdRespSuspensao {nameof(Perfil.IdRespSuspensao)},
+                NomeRespSuspensao {nameof(Perfil.NomeRespSuspensao)},
+                DataSuspensao {nameof(Perfil.DataSuspensao)}
+            FROM
+                Perfis WITH(NOLOCK)
+            WHERE
+                StatusPerfil = @StatusPerfil
+                AND TipoSuspensao = @TipoSuspensao
+            ORDER BY
+                Nome";
+
+        var perfis = await _vmiDbContext.Connection.QueryAsync<Perfil>(sql, 
+            new { 
+                StatusPerfil = StatusPerfilEnum.Suspenso, 
+                TipoSuspensao = TipoSuspensaoEnum.Permanente 
+            });
+        
+        return perfis.ToList();
     }
 }

@@ -4,7 +4,7 @@ namespace Vmi.Portal.Repositories.Interfaces;
 
 public interface IPerfilRotinaRepository
 {
-    Task<IEnumerable<PerfilRotina>> ObterPerfilRotinaPorIdPerfil(int idPerfil);
+    Task<IEnumerable<PerfilRotina>> ObterPerfilRotinaPorIdPerfil(Guid idPerfil);
     Task InserirPerfilRotinas(IEnumerable<PerfilRotina> perfilRotinas);
-    Task ExcluirPerfilRotina(int idPerfil);
+    Task ExcluirPerfilRotina(Guid idPerfil);
 }

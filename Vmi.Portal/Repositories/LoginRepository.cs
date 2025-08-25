@@ -24,16 +24,27 @@ public class LoginRepository : ILoginRepository
                         u.Nome,
                         u.Email,
                         u.Senha,
-                        u.Perfil_id,
+                        u.IdPerfil,
                         u.NomeRespInclusao,
                         u.DataInclusao,
                         u.StatusUsuario,
                         p.Nome AS PerfilNome,
-                        u.IsPrimeiroAcesso
+                        p.StatusPerfil,
+                        u.IsPrimeiroAcesso,
+                        u.TipoAcesso,
+                        u.TipoPessoa,
+                        u.HorariosAcesso,
+                        u.TipoSuspensao,
+                        u.DataInicioSuspensao,
+                        u.DataFimSuspensao,
+                        u.MotivoSuspensao,
+                        u.IdRespSuspensao,
+                        u.NomeRespSuspensao,
+                        u.DataSuspensao
                     FROM
                         Usuarios u
                     LEFT JOIN 
-                        Perfis p ON u.Perfil_id = p.Id
+                        Perfis p ON u.IdPerfil = p.Id
                     WHERE
                         Email = @EMAIL
             ",
@@ -54,15 +65,18 @@ public class LoginRepository : ILoginRepository
                         u.Nome,
                         u.Email,
                         u.Senha,
-                        u.Perfil_id,
+                        u.IdPerfil,
                         u.DataInclusao,
                         u.StatusUsuario,
                         p.Nome AS PerfilNome,
-                        u.IsPrimeiroAcesso
+                        u.IsPrimeiroAcesso,
+                        u.TipoAcesso,
+                        u.TipoPessoa,
+                        u.HorariosAcesso
                     FROM
                         Usuarios u
                     LEFT JOIN 
-                        Perfis p ON u.Perfil_id = p.Id
+                        Perfis p ON u.IdPerfil = p.Id
                     WHERE
                         Email = @EMAIL AND 
                         Senha = @SENHA

@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Vmi.Portal.Entities;
 using Vmi.Portal.Models;
 using Vmi.Portal.Services;
 using Vmi.Portal.Utils;
+using Vmi.Portal.Enums;
 
 namespace Vmi.Portal.Controllers;
 
@@ -30,7 +32,7 @@ public class UsuarioController : ControllerBase
         [FromQuery] int pageSize = 10,
         [FromQuery] string nome = null,
         [FromQuery] string email = null,
-        [FromQuery] int? perfilId = null,
+        [FromQuery] Guid? idPerfil = null,
         [FromQuery(Name = "dataCriacao")] string dataCriacaoStr = null,
         [FromQuery] bool? statusAcesso = null)
     {
@@ -40,13 +42,13 @@ public class UsuarioController : ControllerBase
         }
 
         var usuarios = await _usuarioService.ObterTodosUsuarios(
-            pageNumber, pageSize, nome, email, perfilId, dataCriacao, statusAcesso);
+            pageNumber, pageSize, nome, email, idPerfil, dataCriacao, statusAcesso);
 
         return Ok(usuarios);
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Usuario>> GetById(int id)
+    public async Task<ActionResult<Usuario>> GetById(Guid id)
     {
         try
         {
@@ -68,11 +70,11 @@ public class UsuarioController : ControllerBase
 
 
     [HttpGet("por-email/{email}")]
-    public ActionResult<Usuario> GetByEmail(string email)
+    public async Task<ActionResult<Usuario>> GetByEmail(string email)
     {
         try
         {
-            var usuario = _usuarioService.ObterUsuarioPorEmail(email);
+            var usuario = await _usuarioService.ObterUsuarioPorEmail(email);
 
             if (usuario == null)
             {
@@ -116,10 +118,30 @@ public class UsuarioController : ControllerBase
             }
 
             usuario.DataInclusao = Util.PegaHoraBrasilia();
-            usuario.StatusUsuario = true;
+            usuario.StatusUsuario = StatusUsuarioEnum.Ativo;
             usuario.IsPrimeiroAcesso ??= true;
             usuario.IdRespInclusao = usuario.IdRespInclusao;
             usuario.NomeRespInclusao = criador.Nome;
+            usuario.TipoSuspensao = null;
+            usuario.DataInicioSuspensao = null;
+            usuario.DataFimSuspensao = null;
+            usuario.MotivoSuspensao = null;
+            usuario.IdRespSuspensao = null;
+            usuario.NomeRespSuspensao = null;
+            usuario.DataSuspensao = null;
+
+            if (usuario.HorariosAcesso != null)
+            {
+                var horarios = JsonSerializer.Deserialize<List<HorarioAcesso>>(usuario.HorariosAcesso);
+                if (horarios != null)
+                {
+                    foreach (var horario in horarios)
+                    {
+                        if (horario.DiaSemana < 0 || horario.DiaSemana > 6)
+                            throw new ArgumentException("Dia da semana inválido");
+                    }
+                }
+            }
 
             await _usuarioService.AdicionarUsuario(usuario);
             await _usuarioService.GerarEmailBoasVindas(usuario.Email);
@@ -134,7 +156,7 @@ public class UsuarioController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Usuario usuarioAtualizado)
+    public async Task<IActionResult> Update(Guid id, [FromBody] Usuario usuarioAtualizado)
     {
         try
         {
@@ -162,7 +184,7 @@ public class UsuarioController : ControllerBase
             if (usuarioExistente.Email != usuarioAtualizado.Email)
             {
                 var usuarioComEmail = _usuarioService.ObterUsuarioPorEmail(usuarioAtualizado.Email);
-                if (usuarioComEmail != null && usuarioComEmail.Id != id)
+                if (usuarioComEmail != null && usuarioComEmail.Id.ToString() != id.ToString())
                 {
                     return Conflict("Já existe outro usuário cadastrado com este email.");
                 }
@@ -174,11 +196,18 @@ public class UsuarioController : ControllerBase
                 return BadRequest("O usuário que está modificando não foi encontrado.");
             }
 
-            if (!usuarioAtualizado.StatusUsuario)
+            if (usuarioAtualizado.StatusUsuario != StatusUsuarioEnum.Ativo)
             {
                 usuarioAtualizado.IdRespInativacao = respModificacao.Id;
                 usuarioAtualizado.NomeRespInativacao = respModificacao.Nome;
                 usuarioAtualizado.DataInativacao = Util.PegaHoraBrasilia();
+            }
+
+            if (usuarioAtualizado.StatusUsuario != StatusUsuarioEnum.Ativo && usuarioAtualizado.TipoSuspensao.HasValue)
+            {
+                usuarioAtualizado.IdRespSuspensao = respModificacao.Id;
+                usuarioAtualizado.NomeRespSuspensao = respModificacao.Nome;
+                usuarioAtualizado.DataSuspensao = Util.PegaHoraBrasilia();
             }
 
             usuarioAtualizado.IdRespUltimaAlteracao = respModificacao.Id;
@@ -197,23 +226,136 @@ public class UsuarioController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Delete(int id)
+    public async Task<IActionResult> Delete(Guid id)
     {
         try
         {
-            var usuario = _usuarioService.ObterUsuarioPorId(id);
+            var usuario = await _usuarioService.ObterUsuarioPorId(id);
+
             if (usuario == null)
             {
-                return NotFound();
+                return Ok("Usuário nao encontrado!");
             }
 
-            _usuarioService.RemoverUsuario(id);
-            return NoContent();
+            await _usuarioService.RemoverUsuario(id);
+            return Ok();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Erro ao remover usuário com ID {id}");
             return StatusCode(500, "Ocorreu um erro ao remover o usuário");
+        }
+    }
+
+    [HttpPost("{id}/foto-perfil")]
+    public async Task<IActionResult> UploadFotoPerfil(Guid id, IFormFile fotoPerfil)
+    {
+        try
+        {
+            _logger.LogInformation($"Iniciando upload de foto para usuário {id}");
+            
+            if (fotoPerfil == null || fotoPerfil.Length == 0)
+            {
+                _logger.LogWarning($"Nenhuma imagem foi enviada para usuário {id}");
+                return BadRequest("Nenhuma imagem foi enviada");
+            }
+
+            if (fotoPerfil.Length > 5 * 1024 * 1024)
+            {
+                _logger.LogWarning($"Imagem muito grande para usuário {id}: {fotoPerfil.Length} bytes");
+                return BadRequest("A imagem deve ter no máximo 5MB");
+            }
+
+            if (!fotoPerfil.ContentType.StartsWith("image/"))
+            {
+                _logger.LogWarning($"Tipo de arquivo inválido para usuário {id}: {fotoPerfil.ContentType}");
+                return BadRequest("O arquivo deve ser uma imagem");
+            }
+
+            _logger.LogInformation($"Validando usuário {id}");
+            var usuario = await _usuarioService.ObterUsuarioPorId(id);
+            if (usuario == null)
+            {
+                _logger.LogWarning($"Usuário {id} não encontrado");
+                return NotFound("Usuário não encontrado");
+            }
+
+            _logger.LogInformation($"Processando imagem para usuário {id}");
+  
+            using var memoryStream = new MemoryStream();
+            await fotoPerfil.CopyToAsync(memoryStream);
+            var imageBytes = memoryStream.ToArray();
+            var base64String = Convert.ToBase64String(imageBytes);
+            var dataUrl = $"data:{fotoPerfil.ContentType};base64,{base64String}";
+
+            _logger.LogInformation($"Atualizando usuário {id} com nova foto");
+
+            await _usuarioService.AtualizarFotoPerfil(id, dataUrl);
+
+            _logger.LogInformation($"Foto de perfil atualizada com sucesso para usuário {id}");
+            return Ok(new { message = "Foto de perfil atualizada com sucesso", fotoPerfil = dataUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Erro ao fazer upload da foto de perfil para usuário com ID {id}");
+            return StatusCode(500, "Ocorreu um erro ao processar a imagem");
+        }
+    }
+
+    [HttpDelete("{id}/foto-perfil")]
+    public async Task<IActionResult> RemoverFotoPerfil(Guid id)
+    {
+        try
+        {
+            _logger.LogInformation($"Iniciando remoção de foto para usuário {id}");
+            
+            var usuario = await _usuarioService.ObterUsuarioPorId(id);
+            if (usuario == null)
+            {
+                _logger.LogWarning($"Usuário {id} não encontrado para remoção de foto");
+                return NotFound("Usuário não encontrado");
+            }
+
+            _logger.LogInformation($"Removendo foto de perfil do usuário {id}");
+
+            await _usuarioService.RemoverFotoPerfil(id);
+
+            _logger.LogInformation($"Foto de perfil removida com sucesso do usuário {id}");
+            return Ok(new { message = "Foto de perfil removida com sucesso" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Erro ao remover foto de perfil do usuário com ID {id}");
+            return StatusCode(500, "Ocorreu um erro ao remover a foto de perfil");
+        }
+    }
+
+    [HttpGet("exportar-excel")]
+    public async Task<IActionResult> UsuariosReportExport(
+    [FromQuery] string nome = null,
+    [FromQuery] string email = null,
+    [FromQuery] Guid? perfilId = null,
+    [FromQuery(Name = "dataCriacao")] string dataCriacaoStr = null,
+    [FromQuery] bool? statusAcesso = null)
+    {
+        try
+        {
+            if (!Util.ConverterDataParaDDMMYYYY(dataCriacaoStr, "dd/MM/yyyy", out DateTime? dataCriacao))
+            {
+                return BadRequest("Formato de data inválido. Use dd/MM/yyyy.");
+            }
+
+            var excelBytes = await _usuarioService.ExportarUsuariosParaExcel(1,10,
+                nome, email, perfilId, dataCriacao, statusAcesso);
+
+            return File(excelBytes,
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                      $"usuarios-{DateTime.Now:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao exportar usuários para Excel");
+            return StatusCode(500, "Ocorreu um erro ao exportar os usuários para Excel");
         }
     }
 }

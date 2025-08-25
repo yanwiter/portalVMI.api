@@ -7,24 +7,23 @@ namespace Vmi.Portal.Repositories;
 
 public class PerfilRotinaRepository(VmiDbContext vmiDbContext) : IPerfilRotinaRepository
 {
-
-    public async Task<IEnumerable<PerfilRotina>> ObterPerfilRotinaPorIdPerfil(int idPerfil)
+    public async Task<IEnumerable<PerfilRotina>> ObterPerfilRotinaPorIdPerfil(Guid idPerfil)
     {
         string sql = $@"
                         SELECT
                             Id {nameof(PerfilRotina.Id)},
-                            Perfil_id {nameof(PerfilRotina.PerfilId)},
-                            Rotina_id {nameof(PerfilRotina.RotinaId)},
-                            Acesso_id {nameof(PerfilRotina.AcessoId)}
+                            IdPerfil {nameof(PerfilRotina.IdPerfil)},
+                            IdRotina {nameof(PerfilRotina.IdRotina)},
+                            IdAcesso {nameof(PerfilRotina.IdAcesso)}
                         FROM
                             PerfisRotinas
                         WHERE
-                            Perfil_id = @PERFIL_ID;
+                            IdPerfil = @IDPERFIL;
                     ";
 
         return await vmiDbContext.Connection.QueryAsync<PerfilRotina>(
             sql,
-            new { PERFIL_ID = idPerfil }
+            new { IDPERFIL = idPerfil.ToString() }
             );
     }
 
@@ -33,15 +32,15 @@ public class PerfilRotinaRepository(VmiDbContext vmiDbContext) : IPerfilRotinaRe
         string sql = $@"
                         INSERT INTO
                             PerfisRotinas (
-                                Perfil_id,
-                                Rotina_id,
-                                Acesso_id
+                                IdPerfil,
+                                IdRotina,
+                                IdAcesso
                             )
                         VALUES
                             (
-                                @{nameof(PerfilRotina.PerfilId)},
-                                @{nameof(PerfilRotina.RotinaId)},
-                                @{nameof(PerfilRotina.AcessoId)}
+                                @{nameof(PerfilRotina.IdPerfil)},
+                                @{nameof(PerfilRotina.IdRotina)},
+                                @{nameof(PerfilRotina.IdAcesso)}
                             )
                     ";
 
@@ -50,15 +49,15 @@ public class PerfilRotinaRepository(VmiDbContext vmiDbContext) : IPerfilRotinaRe
             perfilRotinas);
     }
 
-    public async Task ExcluirPerfilRotina(int idPerfil)
+    public async Task ExcluirPerfilRotina(Guid idPerfil)
     {
         string sql = $@"
                         DELETE FROM
                             PerfisRotinas
                         WHERE
-                            Perfil_id = @PERFIL_ID
+                            IdPerfil = @IDPERFIL
                     ";
 
-        await vmiDbContext.Connection.ExecuteAsync(sql, new { PERFIL_ID = idPerfil });
+        await vmiDbContext.Connection.ExecuteAsync(sql, new { IDPERFIL = idPerfil });
     }
 }

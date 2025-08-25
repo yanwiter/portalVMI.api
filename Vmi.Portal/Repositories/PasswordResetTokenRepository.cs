@@ -40,14 +40,14 @@ public class PasswordResetTokenRepository : IPasswordResetTokenRepository
     {
         var sql = @"
                 INSERT INTO TokenRedefinicaoSenha 
-                (Token, UsuarioId, DataExpiracao, IsTokenUsado)
+                (Token, IdUsuario, DataExpiracao, IsTokenUsado)
                 VALUES 
-                (@Token, @UsuarioId, @DataExpiracao, @IsTokenUsado)";
+                (@Token, @IdUsuario, @DataExpiracao, @IsTokenUsado)";
 
         await _vmiDbContext.Connection.ExecuteAsync(sql, new
         {
             token.Token,
-            token.UsuarioId,
+            token.IdUsuario,
             token.DataExpiracao,
             token.IsTokenUsado
         });

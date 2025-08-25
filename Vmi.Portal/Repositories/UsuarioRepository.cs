@@ -1,8 +1,10 @@
 ﻿using Dapper;
+using DocumentFormat.OpenXml.Drawing.Charts;
 using System.Threading.Tasks;
 using Vmi.Portal.Common;
 using Vmi.Portal.DbContext;
 using Vmi.Portal.Entities;
+using Vmi.Portal.Enums;
 
 namespace Vmi.Portal.Repositories;
 
@@ -15,29 +17,47 @@ public class UsuarioRepository : IUsuarioRepository
         _vmiDbContext = vmiDbContext;
     }
 
-    public async Task<PagedResult<Usuario>> ObterTodosUsuarios(int pageNumber, int pageSize, string nome, string email, int? perfilId, DateTime? dataCriacao, bool? statusAcesso)
+    public async Task<PagedResult<Usuario>> ObterTodosUsuarios(int pageNumber, int pageSize, string nome, string email, Guid? idPerfil, DateTime? dataCriacao, bool? statusAcesso)
     {
         string sql = @"
-                    SELECT 
-                        u.Id,
-                        u.Nome,
-                        u.Email,
-                        u.Senha,
-                        u.Perfil_id,
-                        u.DataInclusao,
-                        u.DataUltimaAlteracao,
-                        u.StatusUsuario,
-                        p.Nome AS PerfilNome,
-                        uc.Nome AS NomeRespInclusao,
-                        u.NomeRespUltimaAlteracao,
-                        u.JustificativaInativacao
-                    FROM
-                        Usuarios u
-                    LEFT JOIN 
-                        Perfis p ON u.Perfil_id = p.Id
-                    LEFT JOIN
-                        Usuarios uc ON u.IdRespInclusao = uc.Id
-                    WHERE 1=1";
+                SELECT 
+                    u.Id,
+                    u.Nome,
+                    u.Email,
+                    u.Senha,
+                    u.IdPerfil,
+                    u.DataInclusao,
+                    u.DataUltimaAlteracao,
+                    u.DataInativacao,
+                    u.StatusUsuario,
+                    u.DataUltimoLogin,
+                    p.Nome AS PerfilNome,
+                    uc.Nome AS NomeRespInclusao,
+                    u.NomeRespUltimaAlteracao,
+                    u.JustificativaInativacao,
+                    u.Telefone,
+                    u.CpfCnpj,
+                    u.UsuarioLogin,
+                    u.DataExpiracao,
+                    u.Observacoes,
+                    u.TipoAcesso,
+                    u.TipoPessoa,
+                    u.HorariosAcesso,
+                    u.TipoSuspensao,
+                    u.DataInicioSuspensao,
+                    u.DataFimSuspensao,
+                    u.MotivoSuspensao,
+                    u.IdRespSuspensao,
+                    u.NomeRespSuspensao,
+                    u.DataSuspensao,
+                    u.FotoPerfil
+                FROM
+                    Usuarios u
+                LEFT JOIN 
+                    Perfis p ON u.IdPerfil = p.Id
+                LEFT JOIN
+                    Usuarios uc ON u.IdRespInclusao = uc.Id
+                WHERE 1=1";
 
         var countSql = "SELECT COUNT(*) FROM Usuarios u WHERE 1=1";
 
@@ -53,10 +73,10 @@ public class UsuarioRepository : IUsuarioRepository
             countSql += " AND u.Email LIKE @EMAIL";
         }
 
-        if (perfilId.HasValue)
+        if (idPerfil.HasValue)
         {
-            sql += " AND u.Perfil_id = @IDPERFIL";
-            countSql += " AND u.Perfil_id = @IDPERFIL";
+            sql += " AND u.IdPerfil = @IDPERFIL";
+            countSql += " AND u.IdPerfil = @IDPERFIL";
         }
 
         if (dataCriacao.HasValue)
@@ -85,7 +105,7 @@ public class UsuarioRepository : IUsuarioRepository
             {
                 NOME = string.IsNullOrEmpty(nome) ? null : $"%{nome}%",
                 EMAIL = string.IsNullOrEmpty(email) ? null : $"%{email}%",
-                IDPERFIL = perfilId,
+                IDPERFIL = idPerfil,
                 DATA_CRIACAO = dataCriacao,
                 STATUS_ACESSO = statusAcesso
             });
@@ -94,7 +114,7 @@ public class UsuarioRepository : IUsuarioRepository
             {
                 NOME = string.IsNullOrEmpty(nome) ? null : $"%{nome}%",
                 EMAIL = string.IsNullOrEmpty(email) ? null : $"%{email}%",
-                IDPERFIL = perfilId,
+                IDPERFIL = idPerfil,
                 DATA_CRIACAO = dataCriacao,
                 STATUS_ACESSO = statusAcesso,
                 OFFSET = (pageNumber - 1) * pageSize,
@@ -112,16 +132,33 @@ public class UsuarioRepository : IUsuarioRepository
 
     }
 
-    public async Task<Usuario> ObterUsuarioPorId(int id)
+    public async Task<Usuario> ObterUsuarioPorId(Guid id)
     {
-        const string sql = "SELECT * FROM Usuarios WHERE Id = @Id";
-        return _vmiDbContext.Connection.QueryFirstOrDefault<Usuario>(sql, new { Id = id });
+        const string sql = @"
+        SELECT
+            u.*, p.Nome AS PerfilNome
+        FROM
+            Usuarios u
+        LEFT JOIN
+            Perfis p ON u.IdPerfil = p.Id
+        WHERE u.Id = @Id";
+
+        return await _vmiDbContext.Connection.QueryFirstOrDefaultAsync<Usuario>(sql, new { Id = id });
     }
 
     public async Task<Usuario> ObterUsuarioPorEmail(string email)
     {
-        const string sql = "SELECT * FROM Usuarios WHERE Email = @Email";
-        return _vmiDbContext.Connection.QueryFirstOrDefault<Usuario>(sql, new { Email = email });
+        const string sql = @"
+        SELECT 
+            u.*, p.Nome AS PerfilNome 
+        FROM 
+            Usuarios u
+        LEFT JOIN 
+            Perfis p ON u.IdPerfil = p.Id
+        WHERE 
+            u.Email = @Email";
+
+        return await _vmiDbContext.Connection.QueryFirstOrDefaultAsync<Usuario>(sql, new { Email = email });
     }
 
     public async Task AdicionarUsuario(Usuario usuario)
@@ -133,30 +170,62 @@ public class UsuarioRepository : IUsuarioRepository
                         {nameof(Usuario.Nome)},
                         {nameof(Usuario.Email)},
                         {nameof(Usuario.Senha)},
-                        {nameof(Usuario.Perfil_id)},
+                        {nameof(Usuario.IdPerfil)},
                         {nameof(Usuario.IdRespInclusao)},
                         {nameof(Usuario.NomeRespInclusao)},
                         {nameof(Usuario.DataInclusao)},
                         {nameof(Usuario.StatusUsuario)},
-                        {nameof(Usuario.IsPrimeiroAcesso)}
+                        {nameof(Usuario.IsPrimeiroAcesso)},
+                        {nameof(Usuario.Telefone)},
+                        {nameof(Usuario.CpfCnpj)},
+                        {nameof(Usuario.UsuarioLogin)},
+                        {nameof(Usuario.DataExpiracao)},
+                        {nameof(Usuario.Observacoes)},
+                        {nameof(Usuario.TipoAcesso)},
+                        {nameof(Usuario.TipoPessoa)},
+                        {nameof(Usuario.HorariosAcesso)},
+                        {nameof(Usuario.TipoSuspensao)},
+                        {nameof(Usuario.DataInicioSuspensao)},
+                        {nameof(Usuario.DataFimSuspensao)},
+                        {nameof(Usuario.MotivoSuspensao)},
+                        {nameof(Usuario.IdRespSuspensao)},
+                        {nameof(Usuario.NomeRespSuspensao)},
+                        {nameof(Usuario.DataSuspensao)},
+                        {nameof(Usuario.FotoPerfil)}
                     )
                 VALUES
                     (
                         @Nome,
                         @Email,
                         @Senha,
-                        @Perfil_id,
+                        @IdPerfil,
                         @IdRespInclusao,
                         @NomeRespInclusao,
                         @DataInclusao,
                         @StatusUsuario,
-                        @IsPrimeiroAcesso
+                        @IsPrimeiroAcesso,
+                        @Telefone,
+                        @CpfCnpj,
+                        @UsuarioLogin,
+                        @DataExpiracao,
+                        @Observacoes,
+                        @TipoAcesso,
+                        @TipoPessoa,
+                        @HorariosAcesso,
+                        @TipoSuspensao,
+                        @DataInicioSuspensao,
+                        @DataFimSuspensao,
+                        @MotivoSuspensao,
+                        @IdRespSuspensao,
+                        @NomeRespSuspensao,
+                        @DataSuspensao,
+                        @FotoPerfil
                     );
 
                 SELECT SCOPE_IDENTITY();
             ";
 
-        await _vmiDbContext.Connection.ExecuteScalarAsync<int>(sql, usuario);
+        await _vmiDbContext.Connection.ExecuteScalarAsync<Guid>(sql, usuario);
     }
 
     public async Task AtualizarUsuario(Usuario usuario)
@@ -182,13 +251,109 @@ public class UsuarioRepository : IUsuarioRepository
             parameters.Add(nameof(Usuario.Senha), usuario.Senha);
         }
 
-        if (usuario.Perfil_id != null)
+        if (usuario.IdPerfil != null)
         {
-            sqlSet.Add($"Perfil_id = @{nameof(Usuario.Perfil_id)}");
-            parameters.Add(nameof(Usuario.Perfil_id), usuario.Perfil_id);
+            sqlSet.Add($"IdPerfil = @{nameof(Usuario.IdPerfil)}");
+            parameters.Add(nameof(Usuario.IdPerfil), usuario.IdPerfil);
         }
 
-        if (usuario.StatusUsuario)
+        if (usuario.Telefone != null)
+        {
+            sqlSet.Add($"Telefone = @{nameof(Usuario.Telefone)}");
+            parameters.Add(nameof(Usuario.Telefone), usuario.Telefone);
+        }
+
+        if (usuario.CpfCnpj != null)
+        {
+            sqlSet.Add($"CpfCnpj = @{nameof(Usuario.CpfCnpj)}");
+            parameters.Add(nameof(Usuario.CpfCnpj), usuario.CpfCnpj);
+        }
+
+        if (usuario.UsuarioLogin != null)
+        {
+            sqlSet.Add($"UsuarioLogin = @{nameof(Usuario.UsuarioLogin)}");
+            parameters.Add(nameof(Usuario.UsuarioLogin), usuario.UsuarioLogin);
+        }
+
+        if (usuario.DataExpiracao != null)
+        {
+            sqlSet.Add($"DataExpiracao = @{nameof(Usuario.DataExpiracao)}");
+            parameters.Add(nameof(Usuario.DataExpiracao), usuario.DataExpiracao);
+        }
+
+        if (usuario.Observacoes != null)
+        {
+            sqlSet.Add($"Observacoes = @{nameof(Usuario.Observacoes)}");
+            parameters.Add(nameof(Usuario.Observacoes), usuario.Observacoes);
+        }
+
+        if (usuario.TipoAcesso != null)
+        {
+            sqlSet.Add($"TipoAcesso = @{nameof(Usuario.TipoAcesso)}");
+            parameters.Add(nameof(Usuario.TipoAcesso), usuario.TipoAcesso);
+        }
+
+        if (usuario.TipoPessoa != null)
+        {
+            sqlSet.Add($"TipoPessoa = @{nameof(Usuario.TipoPessoa)}");
+            parameters.Add(nameof(Usuario.TipoPessoa), usuario.TipoPessoa);
+        }
+
+        if (usuario.HorariosAcesso != null)
+        {
+            sqlSet.Add($"HorariosAcesso = @{nameof(Usuario.HorariosAcesso)}");
+            parameters.Add(nameof(Usuario.HorariosAcesso), usuario.HorariosAcesso);
+        }
+
+        if (usuario.FotoPerfil != null)
+        {
+            sqlSet.Add($"FotoPerfil = @{nameof(Usuario.FotoPerfil)}");
+            parameters.Add(nameof(Usuario.FotoPerfil), usuario.FotoPerfil);
+        }
+
+        if (usuario.TipoSuspensao != null)
+        {
+            sqlSet.Add($"TipoSuspensao = @{nameof(Usuario.TipoSuspensao)}");
+            parameters.Add(nameof(Usuario.TipoSuspensao), usuario.TipoSuspensao);
+        }
+
+        if (usuario.DataInicioSuspensao != null)
+        {
+            sqlSet.Add($"DataInicioSuspensao = @{nameof(Usuario.DataInicioSuspensao)}");
+            parameters.Add(nameof(Usuario.DataInicioSuspensao), usuario.DataInicioSuspensao);
+        }
+
+        if (usuario.DataFimSuspensao != null)
+        {
+            sqlSet.Add($"DataFimSuspensao = @{nameof(Usuario.DataFimSuspensao)}");
+            parameters.Add(nameof(Usuario.DataFimSuspensao), usuario.DataFimSuspensao);
+        }
+
+        if (usuario.MotivoSuspensao != null)
+        {
+            sqlSet.Add($"MotivoSuspensao = @{nameof(Usuario.MotivoSuspensao)}");
+            parameters.Add(nameof(Usuario.MotivoSuspensao), usuario.MotivoSuspensao);
+        }
+
+        if (usuario.IdRespSuspensao != null)
+        {
+            sqlSet.Add($"IdRespSuspensao = @{nameof(Usuario.IdRespSuspensao)}");
+            parameters.Add(nameof(Usuario.IdRespSuspensao), usuario.IdRespSuspensao);
+        }
+
+        if (usuario.NomeRespSuspensao != null)
+        {
+            sqlSet.Add($"NomeRespSuspensao = @{nameof(Usuario.NomeRespSuspensao)}");
+            parameters.Add(nameof(Usuario.NomeRespSuspensao), usuario.NomeRespSuspensao);
+        }
+
+        if (usuario.DataSuspensao != null)
+        {
+            sqlSet.Add($"DataSuspensao = @{nameof(Usuario.DataSuspensao)}");
+            parameters.Add(nameof(Usuario.DataSuspensao), usuario.DataSuspensao);
+        }
+
+        if (usuario.StatusUsuario == StatusUsuarioEnum.Ativo)
         {
             sqlSet.Add($"StatusUsuario = @{nameof(usuario.StatusUsuario)}");
             parameters.Add(nameof(Usuario.StatusUsuario), usuario.StatusUsuario);
@@ -212,7 +377,7 @@ public class UsuarioRepository : IUsuarioRepository
                 parameters.Add(nameof(Usuario.NomeRespInativacao), usuario.NomeRespInativacao);
             }
 
-            sqlSet.Add($"DataInativacao = @{nameof(Perfil.DataInativacao)}");
+            sqlSet.Add($"DataInativacao = @{nameof(Usuario.DataInativacao)}");
             parameters.Add(nameof(Usuario.DataInativacao), DateTime.Now);
 
             if (usuario.JustificativaInativacao != null)
@@ -246,6 +411,12 @@ public class UsuarioRepository : IUsuarioRepository
             parameters.Add(nameof(Usuario.NomeRespUltimaAlteracao), usuario.NomeRespUltimaAlteracao);
         }
 
+        if (usuario.DataUltimoLogin != null)
+        {
+            sqlSet.Add($"DataUltimoLogin = @{nameof(Usuario.DataUltimoLogin)}");
+            parameters.Add(nameof(Usuario.DataUltimoLogin), usuario.DataUltimoLogin);
+        }
+
         parameters.Add(nameof(Usuario.Id), usuario.Id);
 
         if (sqlSet.Any())
@@ -255,7 +426,7 @@ public class UsuarioRepository : IUsuarioRepository
         }
     }
 
-    public async Task DeletarUsuario(int id)
+    public async Task DeletarUsuario(Guid id)
     {
         string sql = "DELETE FROM Usuarios WHERE Id = @Id";
         await _vmiDbContext.Connection.ExecuteAsync(sql, new { Id = id });
@@ -264,5 +435,23 @@ public class UsuarioRepository : IUsuarioRepository
     public bool Save()
     {
         return true;
+    }
+
+    public async Task AtualizarFotoPerfil(Guid id, string fotoPerfil)
+    {
+        const string sql = "UPDATE Usuarios SET FotoPerfil = @FotoPerfil WHERE Id = @Id";
+        
+        await _vmiDbContext.Connection.ExecuteAsync(sql, new 
+        { 
+            Id = id, 
+            FotoPerfil = fotoPerfil 
+        });
+    }
+
+    public async Task RemoverFotoPerfil(Guid id)
+    {
+        const string sql = "UPDATE Usuarios SET FotoPerfil = NULL WHERE Id = @Id";
+        
+        await _vmiDbContext.Connection.ExecuteAsync(sql, new { Id = id });
     }
 }

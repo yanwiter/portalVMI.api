@@ -25,7 +25,7 @@ public class ModuloRepository : IModuloRepository
             SELECT
                 CAST(SCOPE_IDENTITY() as int)";
 
-        var id = _vmiDbContext.Connection.QuerySingle<int>(sql, modulo);
+        var id = _vmiDbContext.Connection.QuerySingle<Guid>(sql, modulo);
         modulo.Id = id;
     }
 

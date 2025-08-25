@@ -2,8 +2,8 @@
 
 public class Rotina
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     public string Nome { get; set; }
-    public int ModuloId { get; set; }
+    public Guid IdModulo { get; set; }
     public string ModuloNome { get; set; }
 }

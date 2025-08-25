@@ -1,11 +1,13 @@
-﻿using Vmi.Portal.Common;
+﻿using ClosedXML.Excel;
+using Vmi.Portal.Common;
 using Vmi.Portal.Entities;
 using Vmi.Portal.Repositories;
 using Vmi.Portal.Services.Interfaces;
+using Vmi.Portal.Utils;
+using Vmi.Portal.Enums;
 using BC = BCrypt.Net.BCrypt;
 
 namespace Vmi.Portal.Services;
-
 public class UsuarioService : IUsuarioService
 {
     private readonly IUsuarioRepository _usuarioRepository;
@@ -23,12 +25,12 @@ public class UsuarioService : IUsuarioService
         _configuration = configuration;
     }
 
-    public async Task<PagedResult<Usuario>> ObterTodosUsuarios(int pageNumber, int pageSize, string nome, string email, int? perfilId, DateTime? dataCriacao, bool? statusAcesso)
+    public async Task<PagedResult<Usuario>> ObterTodosUsuarios(int pageNumber, int pageSize, string nome, string email, Guid? idPerfil, DateTime? dataCriacao, bool? statusAcesso)
     {
-        return await _usuarioRepository.ObterTodosUsuarios(pageNumber, pageSize, nome, email, perfilId, dataCriacao, statusAcesso);
+        return await _usuarioRepository.ObterTodosUsuarios(pageNumber, pageSize, nome, email, idPerfil, dataCriacao, statusAcesso);
     }
 
-    public async Task<Usuario> ObterUsuarioPorId(int id)
+    public async Task<Usuario> ObterUsuarioPorId(Guid id)
     {
         return await _usuarioRepository.ObterUsuarioPorId(id);
     }
@@ -38,8 +40,27 @@ public class UsuarioService : IUsuarioService
         return await _usuarioRepository.ObterUsuarioPorEmail(email);
     }
 
+    public async Task AtualizarFotoPerfil(Guid id, string fotoPerfil)
+    {
+        await _usuarioRepository.AtualizarFotoPerfil(id, fotoPerfil);
+    }
+
+    public async Task RemoverFotoPerfil(Guid id)
+    {
+        await _usuarioRepository.RemoverFotoPerfil(id);
+    }
+
     public async Task AdicionarUsuario(Usuario usuario)
     {
+        // Definir valores padrão para campos de suspensão
+        usuario.TipoSuspensao = null;
+        usuario.DataInicioSuspensao = null;
+        usuario.DataFimSuspensao = null;
+        usuario.MotivoSuspensao = null;
+        usuario.IdRespSuspensao = null;
+        usuario.NomeRespSuspensao = null;
+        usuario.DataSuspensao = null;
+        
         await _usuarioRepository.AdicionarUsuario(usuario);
     }
 
@@ -51,7 +72,7 @@ public class UsuarioService : IUsuarioService
             return (true, "Erro ao buscar usuário por E-mail");
         }
 
-        var linkApp = $"{_configuration["Frontend:Url"]}/authenticate";
+        var linkApp = $"{_configuration["Frontend:Url"]}/";
 
         var emailBody = EnviarEmailBoasVindas(linkApp, usuario.Nome, usuario.Email, usuario.Senha);
 
@@ -95,7 +116,7 @@ public class UsuarioService : IUsuarioService
                 }}
 
                 .header {{
-                    background: #b38a5e;
+                    background: linear-gradient(180deg, #1a2530 100%, #2c3e50 0%);
                     padding: 30px 20px;
                     text-align: center;
                     color: white;
@@ -122,7 +143,7 @@ public class UsuarioService : IUsuarioService
 
                 .button {{
                     display: inline-block;
-                    background: #b38a5e;
+                    background: linear-gradient(180deg, #1a2530 100%, #2c3e50 0%);
                     color: white !important;
                     text-decoration: none;
                     padding: 12px 30px;
@@ -141,7 +162,7 @@ public class UsuarioService : IUsuarioService
                 .footer {{
                     text-align: center;
                     padding: 20px;
-                    background-color: #f9f9f9;
+                    background: linear-gradient(180deg, #1a2530 100%, #2c3e50 0%);
                     font-size: 12px;
                     color: #777;
                 }}
@@ -178,14 +199,14 @@ public class UsuarioService : IUsuarioService
         <body>
             <div class='container'>
                 <div class='header'>
-                    <img src='https://vmimedica.com/wp-content/uploads/2021/07/vmi-medica-logo.svg' alt='VMI Médica' class='logo'>
-                    <h1>Bem-vindo ao Portal VMI</h1>
+                    <img src='https://vmimedica.com/wp-content/uploads/2021/07/vmi-medica-logo.svg' alt='Portal PGA' class='logo'>
+                    <h1>Bem-vindo ao Portal PGA</h1>
                 </div>
 
                 <div class='content'>
                     <p>Olá, {userName}!</p>
     
-                    <p>Seu acesso ao sistema da VMI Médica foi disponibilizado! Abaixo estão suas credenciais temporárias:</p>
+                    <p>Seu acesso ao sistema Portal PGA foi disponibilizado! Abaixo estão suas credenciais temporárias:</p>
                 
                     <div class='credentials'>
                         <p><strong>Login: </strong>{userEmail}</p>
@@ -204,7 +225,7 @@ public class UsuarioService : IUsuarioService
                 </div>
 
                 <div class='footer'>
-                    <p>© {DateTime.Now.Year} VMI Médica. Todos os direitos reservados.</p>
+                    <p>© {DateTime.Now.Year} Portal PGA. Todos os direitos reservados.</p>
                     <p>Este é um email automático, por favor não responda.</p>
                 </div>
             </div>
@@ -214,12 +235,80 @@ public class UsuarioService : IUsuarioService
 
     public async Task AtualizarUsuario(Usuario usuario)
     {
+        if (usuario.StatusUsuario != StatusUsuarioEnum.Ativo && usuario.TipoSuspensao.HasValue)
+        {
+            if (usuario.DataSuspensao == null)
+            {
+                usuario.DataSuspensao = DateTime.Now;
+            }
+        }
+        
         await _usuarioRepository.AtualizarUsuario(usuario);
     }
 
-    public async Task RemoverUsuario(int id)
+    public async Task RemoverUsuario(Guid id)
     {
         await _usuarioRepository.DeletarUsuario(id);
+    }
+
+    public async Task<byte[]> ExportarUsuariosParaExcel(
+        int pageNumber, int pageSize,
+        string nome = null,
+        string email = null,
+        Guid? perfilId = null,
+        DateTime? dataCriacao = null,
+        bool? statusAcesso = null)
+    {
+        var usuariosPaginados = await _usuarioRepository.ObterTodosUsuarios(pageNumber, pageSize, nome, email, perfilId, dataCriacao, statusAcesso);
+
+        using (var workbook = new XLWorkbook())
+        {
+            var worksheet = workbook.Worksheets.Add("Usuários");
+
+            string[] headers = {
+                "ID",
+                "Nome",
+                "Email",
+                "Perfil",
+                "Status",
+                "Data de Inclusão",
+                "Resp. Inclusão",
+                "Data Últ. Modificação",
+                "Resp Últ. Modificação",
+                "Justificativa Inativação"
+            };
+
+            for (int col = 1; col <= headers.Length; col++)
+            {
+                worksheet.Cell(1, col).Value = headers[col - 1];
+                worksheet.Cell(1, col).Style.Font.Bold = true;
+            }
+
+            int row = 2;
+            foreach (var usuario in usuariosPaginados.Items)
+            {
+                worksheet.Cell(row, 1).Value = usuario.Id.ToString();
+                worksheet.Cell(row, 2).Value = usuario.Nome;
+                worksheet.Cell(row, 3).Value = usuario.Email;
+                worksheet.Cell(row, 4).Value = usuario.PerfilNome ?? "N/A";
+                worksheet.Cell(row, 5).Value = usuario.StatusUsuario == StatusUsuarioEnum.Ativo ? "Ativo" : "Inativo";
+                worksheet.Cell(row, 6).Value = usuario.DataInclusao?.ToString("dd/MM/yyyy 'às' HH:mm:ss") ?? "N/A";
+                worksheet.Cell(row, 7).Value = usuario.NomeRespInclusao ?? "N/A";
+                worksheet.Cell(row, 8).Value = usuario.DataUltimaAlteracao?.ToString("dd/MM/yyyy 'às' HH:mm:ss") ?? "N/A";
+                worksheet.Cell(row, 9).Value = usuario.NomeRespUltimaAlteracao ?? "N/A";
+                worksheet.Cell(row, 10).Value = usuario.JustificativaInativacao ?? "-";
+
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using (var stream = new MemoryStream())
+            {
+                workbook.SaveAs(stream);
+                return stream.ToArray();
+            }
+        }
     }
 
     public bool Salvar()

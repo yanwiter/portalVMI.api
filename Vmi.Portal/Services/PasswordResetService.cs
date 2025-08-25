@@ -38,7 +38,7 @@ public class PasswordResetService : IPasswordResetService
         var resetToken = new PasswordResetToken
         {
             Token = token,
-            UsuarioId = usuario.Id,
+            IdUsuario = usuario.Id,
             DataExpiracao = dataExpiracao,
             IsTokenUsado = false
         };
